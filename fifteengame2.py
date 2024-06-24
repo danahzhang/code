@@ -15,40 +15,24 @@ ZERO_DIRECTIONS = {
     
 class Puzzle():
     
-    def __init__(self, row=3, col=3, grid = []):
-        if not grid:
-            self._row = row
-            self._col = col
-        else:
-            self._row = len(grid)
-            self._col = len(grid[0])
-        
+    def __init__(self, row=3, col=3, seed = None, grid = []):
+        self._row = row
+        self._col = col
         numbers = list(range(1, self._row*self._col))+ [0]
         index = 0
+        self._grid = []
         self._finished_grid = []
         for dummyrow in range(row):
             column = []
+            finished_column = []
             for dummycol in range(col):
                 column.append(numbers[index])
+                finished_column.append(numbers[index])
                 index += 1
-            self._finished_grid.append(column)
-        
-        if not grid:
-            random.shuffle(numbers)
-            self._grid = [[numbers.pop() for dummycol in range(col)] for dummyrow in range(row)]
+            self._grid.append(column)
+            self._finished_grid.append(finished_column)
+        self.shuffle(seed)
 
-        else:
-            flatten_grid = []
-            for row in range(self._row):
-                assert len(grid[row]) == self._row, "inputted rows aren't meeting length"
-                flatten_grid += grid[row] 
-                
-            assert len(set(flatten_grid)) == len(flatten_grid), "numbers in inputted grid not unique"
-            assert max(flatten_grid) == self._row * self._col - 1, "max should be " + self._row * self._col - 1 + "but is " + max(flatten_grid)
-            assert min(flatten_grid) == 0, "max should be zero but is " + min(flatten_grid) 
-            self._grid = grid
-        print(self)
-           
     def __str__(self):
         s = ""
         for row in range(self._row):
@@ -99,26 +83,35 @@ class Puzzle():
     def check_correct_value(self, row, col):
         return self._finished_grid[row][col]
 
-    def move(self, arrow):
+    def move(self, arrow, printing=True):
         row_one, col_one = self.get_zero()
         new_square = self.get_nonzero(arrow)
         if new_square:
             row_two, col_two = new_square
             self._grid[row_one][col_one], self._grid[row_two][col_two] = self._grid[row_two][col_two], self._grid[row_one][col_one]
-        print("ARROW: ",arrow)
-        print(self)  
+            if printing:
+                print(self)
 
     def use_solution(self, pattern):
         for letter in pattern:
             self.move(letter)
             print(self)
+    
+    def shuffle(self, seed=None):
+        current_row, current_col = self.get_zero()
+        sequence = [arrow for dummynum in range(self._col*self._row*2) for arrow in ['l',"r","u","d"]]
+        random.Random(seed).shuffle(sequence)
+        for arrow in sequence:
+            row, col = ZERO_DIRECTIONS[arrow]
+            if self.check_in(current_row+row, current_col+col):
+                self.move(arrow, False)
+                current_row, current_col = self.get_zero()
 
     def check_in(self, row, col):
         if row >= self._row or row < 0 or col >= self._col or col < 0:
             return False
         return True
-
-
+  
 def search_path(paths, board, final, frozen, visited, directions):
     path, current = paths.pop(0)
     if current == final:
@@ -135,12 +128,7 @@ def move_number(number, position, board, frozen):
     current_position = board.get_current_position(number)
     number_path = search_path([([], current_position)], board, position, frozen, [], DIRECTIONS)
     for arrow in number_path:
-        # zero_position = board.get_zero()
         next_position = (current_position[0]+DIRECTIONS[arrow][0], current_position[1]+DIRECTIONS[arrow][1])
-        # zero_path = search_path([([], zero_position)], board, next_position, frozen, [current_position], ZERO_DIRECTIONS)
-        # for arrow2 in zero_path:
-        #     path += arrow2
-        #     board.move(arrow2)
         path += move_zero(next_position,board,frozen,temp=current_position)
         path += arrow
         board.move(arrow)
@@ -164,9 +152,10 @@ def move_two_numbers(position_one, board, frozen):
     if board.get_current_position(number_two) == position_two:
       path += move_number(number_two, position_backup, board, frozen)
     path += move_number(number_one, position_two, board, frozen)
+    print(frozen)
     path += move_number(number_two, position_temp, board, frozen+[position_two])
-    path += move_number(number_one, position_one, board, frozen[:-1])
-    path += move_number(number_two, position_two, board, frozen+[position_one])
+    path += move_number(number_one, position_one, board, frozen[:-1]+[position_temp])
+    path += move_number(number_two, position_two, board, frozen[:-1]+[position_one])
     frozen.append(position_one)
     frozen.append(position_two)
     return path
@@ -197,6 +186,8 @@ def solve(board):
     for col in range(cols-2):
         position = (rows-1, col)
         path += move_two_numbers(position, board, frozen)
-        print("D")
-    path += move_zero(board.get_final_position(0), board, frozen)
+    final_number = board.get_rows()*board.get_cols()-1
+    final_position = board.get_final_position(final_number)
+    path += move_number(final_number, final_position, board, frozen)
+    path += move_zero(board.get_final_position(0), board, frozen+[final_position])
     return path
